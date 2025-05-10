@@ -1,0 +1,1058 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    generateName: vault-
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault
+      apps.kubernetes.io/pod-index: "0"
+      component: server
+      controller-revision-hash: vault-6678c44944
+      helm.sh/chart: vault-0.30.0
+      statefulset.kubernetes.io/pod-name: vault-0
+    name: vault-0
+    namespace: vault
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: StatefulSet
+      name: vault
+      uid: b76dad87-0921-48b0-b524-75a22e170e27
+    resourceVersion: "194112"
+    uid: 60649853-88ff-4286-a172-41aa152abdcb
+  spec:
+    containers:
+    - args:
+      - "/usr/local/bin/docker-entrypoint.sh vault server -dev \n"
+      command:
+      - /bin/sh
+      - -ec
+      env:
+      - name: HOST_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.hostIP
+      - name: POD_IP
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: status.podIP
+      - name: VAULT_K8S_POD_NAME
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      - name: VAULT_K8S_NAMESPACE
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.namespace
+      - name: VAULT_ADDR
+        value: http://127.0.0.1:8200
+      - name: VAULT_API_ADDR
+        value: http://$(POD_IP):8200
+      - name: SKIP_CHOWN
+        value: "true"
+      - name: SKIP_SETCAP
+        value: "true"
+      - name: HOSTNAME
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      - name: VAULT_CLUSTER_ADDR
+        value: https://$(HOSTNAME).vault-internal:8201
+      - name: HOME
+        value: /home/vault
+      - name: VAULT_LOG_LEVEL
+        value: debug
+      - name: VAULT_LOG_FORMAT
+        value: standard
+      - name: VAULT_DEV_ROOT_TOKEN_ID
+        value: root
+      - name: VAULT_DEV_LISTEN_ADDRESS
+        value: '[::]:8200'
+      image: hashicorp/vault:1.19.0
+      imagePullPolicy: IfNotPresent
+      lifecycle:
+        preStop:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - sleep 5 && kill -SIGTERM $(pidof vault)
+      name: vault
+      ports:
+      - containerPort: 8200
+        name: http
+        protocol: TCP
+      - containerPort: 8201
+        name: https-internal
+        protocol: TCP
+      - containerPort: 8202
+        name: http-rep
+        protocol: TCP
+      readinessProbe:
+        exec:
+          command:
+          - /bin/sh
+          - -ec
+          - vault status -tls-skip-verify
+        failureThreshold: 2
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 3
+      resources: {}
+      securityContext:
+        allowPrivilegeEscalation: false
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /home/vault
+        name: home
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: kube-api-access-f2z7f
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    hostname: vault-0
+    nodeName: willlenovo
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext:
+      fsGroup: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 100
+    serviceAccount: vault
+    serviceAccountName: vault
+    subdomain: vault-internal
+    terminationGracePeriodSeconds: 10
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - emptyDir: {}
+      name: home
+    - name: kube-api-access-f2z7f
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            expirationSeconds: 3607
+            path: token
+        - configMap:
+            items:
+            - key: ca.crt
+              path: ca.crt
+            name: kube-root-ca.crt
+        - downwardAPI:
+            items:
+            - fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+              path: namespace
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:43Z"
+      status: "True"
+      type: PodReadyToStartContainers
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:41Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T14:10:27Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T14:10:27Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:41Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://2117d8cfb449a343e3d08ce55b28bfffd43f40363afd344fd797673ad7b78865
+      image: hashicorp/vault:1.19.0
+      imageID: docker-pullable://hashicorp/vault@sha256:bbb7f98dc67d9ebdda1256de288df1cb9a5450990e48338043690bee3b332c90
+      lastState: {}
+      name: vault
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2025-05-09T12:30:42Z"
+      volumeMounts:
+      - mountPath: /home/vault
+        name: home
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: kube-api-access-f2z7f
+        readOnly: true
+        recursiveReadOnly: Disabled
+    hostIP: 192.168.127.2
+    hostIPs:
+    - ip: 192.168.127.2
+    phase: Running
+    podIP: 10.42.0.135
+    podIPs:
+    - ip: 10.42.0.135
+    qosClass: BestEffort
+    startTime: "2025-05-09T12:30:41Z"
+- apiVersion: v1
+  kind: Pod
+  metadata:
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    generateName: vault-agent-injector-56459c7545-
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault-agent-injector
+      component: webhook
+      pod-template-hash: 56459c7545
+    name: vault-agent-injector-56459c7545-8lppp
+    namespace: vault
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: ReplicaSet
+      name: vault-agent-injector-56459c7545
+      uid: f09960a1-3a6d-4d3d-9127-d070796b8b30
+    resourceVersion: "192165"
+    uid: 04f17c66-8ac9-4dee-a71e-4215cda487d2
+  spec:
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: vault
+              app.kubernetes.io/name: vault-agent-injector
+              component: webhook
+          topologyKey: kubernetes.io/hostname
+    containers:
+    - args:
+      - agent-inject
+      - 2>&1
+      env:
+      - name: AGENT_INJECT_LISTEN
+        value: :8080
+      - name: AGENT_INJECT_LOG_LEVEL
+        value: info
+      - name: AGENT_INJECT_VAULT_ADDR
+        value: http://vault.vault.svc:8200
+      - name: AGENT_INJECT_VAULT_AUTH_PATH
+        value: auth/kubernetes
+      - name: AGENT_INJECT_VAULT_IMAGE
+        value: hashicorp/vault:1.19.0
+      - name: AGENT_INJECT_TLS_AUTO
+        value: vault-agent-injector-cfg
+      - name: AGENT_INJECT_TLS_AUTO_HOSTS
+        value: vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc
+      - name: AGENT_INJECT_LOG_FORMAT
+        value: standard
+      - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
+        value: "false"
+      - name: AGENT_INJECT_CPU_REQUEST
+        value: 250m
+      - name: AGENT_INJECT_CPU_LIMIT
+        value: 500m
+      - name: AGENT_INJECT_MEM_REQUEST
+        value: 64Mi
+      - name: AGENT_INJECT_MEM_LIMIT
+        value: 128Mi
+      - name: AGENT_INJECT_DEFAULT_TEMPLATE
+        value: map
+      - name: AGENT_INJECT_TEMPLATE_CONFIG_EXIT_ON_RETRY_FAILURE
+        value: "true"
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            apiVersion: v1
+            fieldPath: metadata.name
+      image: hashicorp/vault-k8s:1.6.2
+      imagePullPolicy: IfNotPresent
+      livenessProbe:
+        failureThreshold: 2
+        httpGet:
+          path: /health/ready
+          port: 8080
+          scheme: HTTPS
+        initialDelaySeconds: 5
+        periodSeconds: 2
+        successThreshold: 1
+        timeoutSeconds: 5
+      name: sidecar-injector
+      readinessProbe:
+        failureThreshold: 2
+        httpGet:
+          path: /health/ready
+          port: 8080
+          scheme: HTTPS
+        initialDelaySeconds: 5
+        periodSeconds: 2
+        successThreshold: 1
+        timeoutSeconds: 5
+      resources: {}
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+      startupProbe:
+        failureThreshold: 12
+        httpGet:
+          path: /health/ready
+          port: 8080
+          scheme: HTTPS
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        successThreshold: 1
+        timeoutSeconds: 5
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: kube-api-access-dqbqm
+        readOnly: true
+    dnsPolicy: ClusterFirst
+    enableServiceLinks: true
+    nodeName: willlenovo
+    preemptionPolicy: PreemptLowerPriority
+    priority: 0
+    restartPolicy: Always
+    schedulerName: default-scheduler
+    securityContext:
+      fsGroup: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 100
+    serviceAccount: vault-agent-injector
+    serviceAccountName: vault-agent-injector
+    terminationGracePeriodSeconds: 30
+    tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+    volumes:
+    - name: kube-api-access-dqbqm
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            expirationSeconds: 3607
+            path: token
+        - configMap:
+            items:
+            - key: ca.crt
+              path: ca.crt
+            name: kube-root-ca.crt
+        - downwardAPI:
+            items:
+            - fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+              path: namespace
+  status:
+    conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:43Z"
+      status: "True"
+      type: PodReadyToStartContainers
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:41Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:51Z"
+      status: "True"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:51Z"
+      status: "True"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2025-05-09T12:30:41Z"
+      status: "True"
+      type: PodScheduled
+    containerStatuses:
+    - containerID: docker://7a033dd40b46691b2bce4fd019ba35836319625f56a06180164e84d3959e12de
+      image: hashicorp/vault-k8s:1.6.2
+      imageID: docker-pullable://hashicorp/vault-k8s@sha256:103a2d817a7474a8b678d830b0d6ed2d570cc878e4bc8c146d8d35ec436a8d49
+      lastState: {}
+      name: sidecar-injector
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2025-05-09T12:30:42Z"
+      volumeMounts:
+      - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+        name: kube-api-access-dqbqm
+        readOnly: true
+        recursiveReadOnly: Disabled
+    hostIP: 192.168.127.2
+    hostIPs:
+    - ip: 192.168.127.2
+    phase: Running
+    podIP: 10.42.0.134
+    podIPs:
+    - ip: 10.42.0.134
+    qosClass: BestEffort
+    startTime: "2025-05-09T12:30:41Z"
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault
+      helm.sh/chart: vault-0.30.0
+    name: vault
+    namespace: vault
+    resourceVersion: "192105"
+    uid: 9be1a554-8f8d-48b9-bf0f-53ab3845e89e
+  spec:
+    clusterIP: 10.43.51.170
+    clusterIPs:
+    - 10.43.51.170
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: http
+      nodePort: 30820
+      port: 8200
+      protocol: TCP
+      targetPort: 8200
+    - name: https-internal
+      nodePort: 32183
+      port: 8201
+      protocol: TCP
+      targetPort: 8201
+    publishNotReadyAddresses: true
+    selector:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault
+      component: server
+    sessionAffinity: None
+    type: NodePort
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault-agent-injector
+    name: vault-agent-injector-svc
+    namespace: vault
+    resourceVersion: "192096"
+    uid: 2feaf5ed-ac95-48a9-bc6b-248aab253202
+  spec:
+    clusterIP: 10.43.61.215
+    clusterIPs:
+    - 10.43.61.215
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault-agent-injector
+      component: webhook
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault
+      helm.sh/chart: vault-0.30.0
+      vault-internal: "true"
+    name: vault-internal
+    namespace: vault
+    resourceVersion: "192099"
+    uid: 55c95122-1236-45e6-a810-ba69f3c95b10
+  spec:
+    clusterIP: None
+    clusterIPs:
+    - None
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: http
+      port: 8200
+      protocol: TCP
+      targetPort: 8200
+    - name: https-internal
+      port: 8201
+      protocol: TCP
+      targetPort: 8201
+    publishNotReadyAddresses: true
+    selector:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault
+      component: server
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault-ui
+      helm.sh/chart: vault-0.30.0
+    name: vault-ui
+    namespace: vault
+    resourceVersion: "192110"
+    uid: e991b34f-fcea-46ec-84a0-eaa1bbf7ab3d
+  spec:
+    clusterIP: 10.43.165.47
+    clusterIPs:
+    - 10.43.165.47
+    externalTrafficPolicy: Cluster
+    internalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
+    ports:
+    - name: http
+      nodePort: 30821
+      port: 8200
+      protocol: TCP
+      targetPort: 8200
+    publishNotReadyAddresses: true
+    selector:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault
+      component: server
+    sessionAffinity: None
+    type: NodePort
+  status:
+    loadBalancer: {}
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    annotations:
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault-agent-injector
+      component: webhook
+    name: vault-agent-injector
+    namespace: vault
+    resourceVersion: "192169"
+    uid: 7bc92cb8-e1bd-4db5-97e2-26b4105d9e0b
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app.kubernetes.io/instance: vault
+        app.kubernetes.io/name: vault-agent-injector
+        component: webhook
+    strategy:
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 25%
+      type: RollingUpdate
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/instance: vault
+          app.kubernetes.io/name: vault-agent-injector
+          component: webhook
+      spec:
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: vault
+                  app.kubernetes.io/name: vault-agent-injector
+                  component: webhook
+              topologyKey: kubernetes.io/hostname
+        containers:
+        - args:
+          - agent-inject
+          - 2>&1
+          env:
+          - name: AGENT_INJECT_LISTEN
+            value: :8080
+          - name: AGENT_INJECT_LOG_LEVEL
+            value: info
+          - name: AGENT_INJECT_VAULT_ADDR
+            value: http://vault.vault.svc:8200
+          - name: AGENT_INJECT_VAULT_AUTH_PATH
+            value: auth/kubernetes
+          - name: AGENT_INJECT_VAULT_IMAGE
+            value: hashicorp/vault:1.19.0
+          - name: AGENT_INJECT_TLS_AUTO
+            value: vault-agent-injector-cfg
+          - name: AGENT_INJECT_TLS_AUTO_HOSTS
+            value: vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc
+          - name: AGENT_INJECT_LOG_FORMAT
+            value: standard
+          - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
+            value: "false"
+          - name: AGENT_INJECT_CPU_REQUEST
+            value: 250m
+          - name: AGENT_INJECT_CPU_LIMIT
+            value: 500m
+          - name: AGENT_INJECT_MEM_REQUEST
+            value: 64Mi
+          - name: AGENT_INJECT_MEM_LIMIT
+            value: 128Mi
+          - name: AGENT_INJECT_DEFAULT_TEMPLATE
+            value: map
+          - name: AGENT_INJECT_TEMPLATE_CONFIG_EXIT_ON_RETRY_FAILURE
+            value: "true"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          image: hashicorp/vault-k8s:1.6.2
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: sidecar-injector
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          startupProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          runAsUser: 100
+        serviceAccount: vault-agent-injector
+        serviceAccountName: vault-agent-injector
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    conditions:
+    - lastTransitionTime: "2025-05-09T12:30:51Z"
+      lastUpdateTime: "2025-05-09T12:30:51Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2025-05-09T12:30:41Z"
+      lastUpdateTime: "2025-05-09T12:30:51Z"
+      message: ReplicaSet "vault-agent-injector-56459c7545" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updatedReplicas: 1
+- apiVersion: apps/v1
+  kind: ReplicaSet
+  metadata:
+    annotations:
+      deployment.kubernetes.io/desired-replicas: "1"
+      deployment.kubernetes.io/max-replicas: "2"
+      deployment.kubernetes.io/revision: "1"
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/name: vault-agent-injector
+      component: webhook
+      pod-template-hash: 56459c7545
+    name: vault-agent-injector-56459c7545
+    namespace: vault
+    ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: Deployment
+      name: vault-agent-injector
+      uid: 7bc92cb8-e1bd-4db5-97e2-26b4105d9e0b
+    resourceVersion: "192168"
+    uid: f09960a1-3a6d-4d3d-9127-d070796b8b30
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app.kubernetes.io/instance: vault
+        app.kubernetes.io/name: vault-agent-injector
+        component: webhook
+        pod-template-hash: 56459c7545
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/instance: vault
+          app.kubernetes.io/name: vault-agent-injector
+          component: webhook
+          pod-template-hash: 56459c7545
+      spec:
+        affinity:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app.kubernetes.io/instance: vault
+                  app.kubernetes.io/name: vault-agent-injector
+                  component: webhook
+              topologyKey: kubernetes.io/hostname
+        containers:
+        - args:
+          - agent-inject
+          - 2>&1
+          env:
+          - name: AGENT_INJECT_LISTEN
+            value: :8080
+          - name: AGENT_INJECT_LOG_LEVEL
+            value: info
+          - name: AGENT_INJECT_VAULT_ADDR
+            value: http://vault.vault.svc:8200
+          - name: AGENT_INJECT_VAULT_AUTH_PATH
+            value: auth/kubernetes
+          - name: AGENT_INJECT_VAULT_IMAGE
+            value: hashicorp/vault:1.19.0
+          - name: AGENT_INJECT_TLS_AUTO
+            value: vault-agent-injector-cfg
+          - name: AGENT_INJECT_TLS_AUTO_HOSTS
+            value: vault-agent-injector-svc,vault-agent-injector-svc.vault,vault-agent-injector-svc.vault.svc
+          - name: AGENT_INJECT_LOG_FORMAT
+            value: standard
+          - name: AGENT_INJECT_REVOKE_ON_SHUTDOWN
+            value: "false"
+          - name: AGENT_INJECT_CPU_REQUEST
+            value: 250m
+          - name: AGENT_INJECT_CPU_LIMIT
+            value: 500m
+          - name: AGENT_INJECT_MEM_REQUEST
+            value: 64Mi
+          - name: AGENT_INJECT_MEM_LIMIT
+            value: 128Mi
+          - name: AGENT_INJECT_DEFAULT_TEMPLATE
+            value: map
+          - name: AGENT_INJECT_TEMPLATE_CONFIG_EXIT_ON_RETRY_FAILURE
+            value: "true"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          image: hashicorp/vault-k8s:1.6.2
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: sidecar-injector
+          readinessProbe:
+            failureThreshold: 2
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 2
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+          startupProbe:
+            failureThreshold: 12
+            httpGet:
+              path: /health/ready
+              port: 8080
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          runAsUser: 100
+        serviceAccount: vault-agent-injector
+        serviceAccountName: vault-agent-injector
+        terminationGracePeriodSeconds: 30
+  status:
+    availableReplicas: 1
+    fullyLabeledReplicas: 1
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+- apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    annotations:
+      meta.helm.sh/release-name: vault
+      meta.helm.sh/release-namespace: vault
+    creationTimestamp: "2025-05-09T12:30:41Z"
+    generation: 1
+    labels:
+      app.kubernetes.io/instance: vault
+      app.kubernetes.io/managed-by: Helm
+      app.kubernetes.io/name: vault
+    name: vault
+    namespace: vault
+    resourceVersion: "194116"
+    uid: b76dad87-0921-48b0-b524-75a22e170e27
+  spec:
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
+    podManagementPolicy: Parallel
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        app.kubernetes.io/instance: vault
+        app.kubernetes.io/name: vault
+        component: server
+    serviceName: vault-internal
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app.kubernetes.io/instance: vault
+          app.kubernetes.io/name: vault
+          component: server
+          helm.sh/chart: vault-0.30.0
+      spec:
+        containers:
+        - args:
+          - "/usr/local/bin/docker-entrypoint.sh vault server -dev \n"
+          command:
+          - /bin/sh
+          - -ec
+          env:
+          - name: HOST_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.hostIP
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          - name: VAULT_K8S_POD_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: VAULT_K8S_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: VAULT_ADDR
+            value: http://127.0.0.1:8200
+          - name: VAULT_API_ADDR
+            value: http://$(POD_IP):8200
+          - name: SKIP_CHOWN
+            value: "true"
+          - name: SKIP_SETCAP
+            value: "true"
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: VAULT_CLUSTER_ADDR
+            value: https://$(HOSTNAME).vault-internal:8201
+          - name: HOME
+            value: /home/vault
+          - name: VAULT_LOG_LEVEL
+            value: debug
+          - name: VAULT_LOG_FORMAT
+            value: standard
+          - name: VAULT_DEV_ROOT_TOKEN_ID
+            value: root
+          - name: VAULT_DEV_LISTEN_ADDRESS
+            value: '[::]:8200'
+          image: hashicorp/vault:1.19.0
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /bin/sh
+                - -c
+                - sleep 5 && kill -SIGTERM $(pidof vault)
+          name: vault
+          ports:
+          - containerPort: 8200
+            name: http
+            protocol: TCP
+          - containerPort: 8201
+            name: https-internal
+            protocol: TCP
+          - containerPort: 8202
+            name: http-rep
+            protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -ec
+              - vault status -tls-skip-verify
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 3
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /home/vault
+            name: home
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext:
+          fsGroup: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          runAsUser: 100
+        serviceAccount: vault
+        serviceAccountName: vault
+        terminationGracePeriodSeconds: 10
+        volumes:
+        - emptyDir: {}
+          name: home
+    updateStrategy:
+      type: OnDelete
+  status:
+    availableReplicas: 1
+    collisionCount: 0
+    currentReplicas: 1
+    currentRevision: vault-6678c44944
+    observedGeneration: 1
+    readyReplicas: 1
+    replicas: 1
+    updateRevision: vault-6678c44944
+    updatedReplicas: 1
+kind: List
+metadata:
+  resourceVersion: ""

@@ -1,0 +1,63 @@
+# Standalone mode configuration with explicit volume for config
+server:
+  # Disable development mode
+  dev:
+    enabled: false
+    
+  # Replace the default config with one that avoids the permission issue
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+      disable_mlock = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "0.0.0.0:8200"
+        cluster_address = "0.0.0.0:8201"
+      }
+
+      # Use in-memory storage for now (we'll switch to file later)
+      storage "inmem" {}
+    
+  # Service configuration
+  service:
+    enabled: true
+    type: NodePort
+    nodePort: 30820
+    
+  # No extra args needed if we provide complete config
+  extraArgs: ""
+  
+  # Add a new EmptyDir volume for the data directory
+  volumes:
+    - name: home
+      emptyDir: {}
+  
+  # Setup proper mounts
+  volumeMounts:
+    - name: home
+      mountPath: /home/vault
+    
+  # Security context with proper permissions
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    fsGroup: 1000
+    
+  # Enable logs
+  logLevel: "debug"
+    
+# Enable UI
+ui:
+  enabled: true
+  serviceType: NodePort
+  serviceNodePort: 30821
+  
+# Disable injector
+injector:
+  enabled: false
+  
+# Disable TLS
+global:
+  tlsDisable: true

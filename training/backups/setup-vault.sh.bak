@@ -1,0 +1,157 @@
+#!/bin/bash
+set -e
+set -o pipefail
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Function to handle errors
+error_handler() {
+  echo -e "${RED}Error occurred at line $1${NC}"
+  exit 1
+}
+
+# Set up error handling
+trap 'error_handler $LINENO' ERR
+
+echo "Running Vault setup script..."
+echo "For further customization, edit the configuration files and run again."
+
+# Create necessary directories
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Checking Vault installation
+section() {
+  echo -e "${BLUE}=== $1 ===${NC}"
+}
+
+section "Checking Vault installation"
+
+# Check if vault namespace exists
+NAMESPACE_EXISTS=$(kubectl get namespace vault --no-headers --output=name 2>/dev/null || echo "")
+
+if [[ -z "$NAMESPACE_EXISTS" ]]; then
+  echo "Vault namespace doesn't exist, creating it..."
+  # Create the namespace
+  kubectl apply -f "$SCRIPT_DIR/vault-config/namespace.yaml"
+else
+  echo "Vault namespace already exists"
+fi
+
+# Check if vault helm release exists
+RELEASE_EXISTS=$(helm list -n vault --filter "^vault$" --short 2>/dev/null || echo "")
+
+if [[ -z "$RELEASE_EXISTS" ]]; then
+  echo "Vault Helm release doesn't exist, installing Vault..."
+
+  # Add the HashiCorp Helm repository if not already added
+  if ! helm repo list | grep -q "hashicorp"; then
+    helm repo add hashicorp https://helm.releases.hashicorp.com
+  fi
+  helm repo update
+
+  # Install Vault using Helm
+  helm install vault hashicorp/vault \
+    --namespace vault \
+    --values "$SCRIPT_DIR/vault-helm/values.yaml"
+
+  echo -e "${GREEN}Vault installation initiated. Waiting for pod to be ready...${NC}"
+
+  # Wait for the Vault pod to be in Running state with timeout
+  TIMEOUT=180
+  WAIT_INTERVAL=5
+  elapsed=0
+
+  while true; do
+    if kubectl -n vault get pods -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].status.phase}' 2>/dev/null | grep -q "Running"; then
+      echo -e "${GREEN}Vault pod is running.${NC}"
+      break
+    fi
+    
+    elapsed=$((elapsed + WAIT_INTERVAL))
+    if [ $elapsed -ge $TIMEOUT ]; then
+      echo -e "${RED}Timeout waiting for Vault pod to be ready.${NC}"
+      echo -e "${YELLOW}You may need to run the initialize-vault.sh script manually once the pod is running.${NC}"
+      exit 1
+    fi
+    
+    echo "Waiting for Vault pod to be ready... ($elapsed/$TIMEOUT seconds)"
+    sleep $WAIT_INTERVAL
+  done
+
+  # Apply network policy
+  kubectl apply -f "$SCRIPT_DIR/vault-config/network-policy.yaml"
+
+  echo -e "${GREEN}Vault pod is running. Proceeding to initialization...${NC}"
+
+  # Initialize Vault
+  if [[ -x "$SCRIPT_DIR/initialize-vault.sh" ]]; then
+    "$SCRIPT_DIR/initialize-vault.sh"
+  else
+    echo -e "${RED}initialize-vault.sh is missing or not executable${NC}"
+    exit 1
+  fi
+else
+  echo "Vault Helm release already exists"
+  
+  # Check if Vault is initialized and unsealed
+  VAULT_POD=$(kubectl -n vault get pods -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  
+  if [[ -n "$VAULT_POD" ]]; then
+    INITIALIZED=$(kubectl -n vault exec $VAULT_POD -- vault status -format=json 2>/dev/null | jq -r '.initialized' 2>/dev/null || echo "unknown")
+    SEALED=$(kubectl -n vault exec $VAULT_POD -- vault status -format=json 2>/dev/null | jq -r '.sealed' 2>/dev/null || echo "unknown")
+    
+    echo "Vault status:"
+    echo "  - Initialized: $INITIALIZED"
+    echo "  - Sealed: $SEALED"
+    
+    if [[ "$INITIALIZED" == "false" || "$SEALED" == "true" ]]; then
+      echo -e "${YELLOW}Vault needs to be initialized or unsealed. Running initialize script...${NC}"
+      if [[ -x "$SCRIPT_DIR/initialize-vault.sh" ]]; then
+        "$SCRIPT_DIR/initialize-vault.sh"
+      else
+        echo -e "${RED}initialize-vault.sh is missing or not executable${NC}"
+        exit 1
+      fi
+    else
+      echo -e "${GREEN}Vault is already initialized and unsealed.${NC}"
+    fi
+  else
+    echo -e "${RED}Cannot find Vault pod. Check the status with:${NC}"
+    echo "kubectl -n vault get pods"
+  fi
+  
+  # Ensure network policy exists
+  if ! kubectl -n vault get networkpolicy vault-network-policy &>/dev/null; then
+    echo "Applying network policy..."
+    kubectl apply -f "$SCRIPT_DIR/vault-config/network-policy.yaml"
+  else
+    echo "Network policy already exists"
+  fi
+fi
+
+# Configure policies if Vault is ready
+VAULT_POD=$(kubectl -n vault get pods -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+if [[ -n "$VAULT_POD" ]]; then
+  INITIALIZED=$(kubectl -n vault exec $VAULT_POD -- vault status -format=json 2>/dev/null | jq -r '.initialized' 2>/dev/null || echo "unknown")
+  SEALED=$(kubectl -n vault exec $VAULT_POD -- vault status -format=json 2>/dev/null | jq -r '.sealed' 2>/dev/null || echo "unknown")
+  
+  if [[ "$INITIALIZED" == "true" && "$SEALED" == "false" ]]; then
+    echo -e "${GREEN}Configuring Vault policies...${NC}"
+    if [[ -x "$SCRIPT_DIR/configure-policies.sh" ]]; then
+      "$SCRIPT_DIR/configure-policies.sh"
+    else
+      echo -e "${YELLOW}configure-policies.sh is missing or not executable. Policies will not be configured.${NC}"
+    fi
+  fi
+fi
+
+echo -e "${GREEN}Setup completed!${NC}"
+echo -e "${GREEN}To access Vault:${NC}"
+echo -e "  ${BLUE}Run ./linux-port-forward.sh to start port forwarding${NC}"
+echo -e "  ${BLUE}Source ~/.vault/config to load environment variables${NC}"
+echo -e "  ${BLUE}Access UI at http://localhost:8201${NC}"

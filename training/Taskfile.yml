@@ -1,0 +1,394 @@
+version: '3'
+
+vars:
+  NAMESPACE: vault
+  VAULT_CONFIG_DIR: '{{.HOME}}/.vault'
+  SCRIPT_DIR: '{{.TASK_DIR}}'
+  DATE: '{{now | date "20060102-150405"}}'
+
+tasks:
+  default:
+    desc: Show help information
+    cmds:
+      - task --list
+    silent: true
+
+  check:
+    desc: Check prerequisites before installation
+    internal: true
+    cmds:
+      - |
+        for cmd in kubectl helm jq openssl; do
+          if ! command -v $cmd &>/dev/null; then
+            echo "ERROR: $cmd command not found. Please install it first."
+            exit 1
+          fi
+        done
+      - |
+        if ! kubectl get nodes &>/dev/null; then
+          echo "ERROR: Cannot connect to Kubernetes. Make sure Rancher Desktop is running."
+          exit 1
+        fi
+    status:
+      - command -v kubectl &>/dev/null
+      - command -v helm &>/dev/null
+      - command -v jq &>/dev/null
+      - command -v openssl &>/dev/null
+      - kubectl get nodes &>/dev/null
+
+  secure-dirs:
+    desc: Create secure directories for Vault configuration
+    internal: true
+    cmds:
+      - mkdir -p {{.VAULT_CONFIG_DIR}}
+      - mkdir -p {{.VAULT_CONFIG_DIR}}/policies
+      - mkdir -p {{.VAULT_CONFIG_DIR}}/logs
+      - mkdir -p {{.VAULT_CONFIG_DIR}}/backups
+      - chmod 700 {{.VAULT_CONFIG_DIR}}
+      - chmod 700 {{.VAULT_CONFIG_DIR}}/policies
+      - chmod 700 {{.VAULT_CONFIG_DIR}}/logs
+      - chmod 700 {{.VAULT_CONFIG_DIR}}/backups
+    status:
+      - test -d {{.VAULT_CONFIG_DIR}}
+      - test -d {{.VAULT_CONFIG_DIR}}/policies
+      - test -d {{.VAULT_CONFIG_DIR}}/logs
+      - test -d {{.VAULT_CONFIG_DIR}}/backups
+
+  setup:
+    desc: Install and configure Vault on Rancher Desktop with enhanced security
+    deps: [check, secure-dirs]
+    cmds:
+      - echo "Setting up HashiCorp Vault with enhanced security..."
+      - kubectl delete namespace vault --ignore-not-found=true
+      - chmod +x {{.SCRIPT_DIR}}/setup-vault.sh
+      - "{{.SCRIPT_DIR}}/setup-vault.sh"
+
+  init:
+    desc: Initialize and unseal Vault with improved key security
+    deps: [check, secure-dirs]
+    cmds:
+      - echo "Initializing and unsealing Vault securely..."
+      - chmod +x {{.SCRIPT_DIR}}/initialize-vault.sh
+      - "{{.SCRIPT_DIR}}/initialize-vault.sh"
+
+  policies:
+    desc: Configure Vault policies with defense-in-depth approach
+    deps: [check]
+    cmds:
+      - echo "Configuring Vault with secure policies..."
+      - chmod +x {{.SCRIPT_DIR}}/configure-policies.sh
+      - "{{.SCRIPT_DIR}}/configure-policies.sh"
+
+  port-forward:
+    desc: Start secure port forwarding (Linux/WSL2)
+    deps: [check]
+    cmds:
+      - echo "Starting port forwarding with security validations..."
+      - chmod +x {{.SCRIPT_DIR}}/linux-port-forward.sh
+      - "{{.SCRIPT_DIR}}/linux-port-forward.sh"
+
+  clean:
+    desc: Securely uninstall Vault and clean up resources
+    deps: [check]
+    cmds:
+      - echo "Cleaning up Vault installation..."
+      - |
+        echo "WARNING: This will delete Vault and all stored secrets."
+        echo "Make sure you have backed up any important data."
+        read -p "Are you sure you want to proceed? (y/N): " confirm
+        if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+          kubectl delete namespace {{.NAMESPACE}} --ignore-not-found=true
+          helm uninstall vault -n {{.NAMESPACE}} --ignore-not-found=true
+          echo "Vault has been uninstalled."
+          
+          read -p "Do you want to delete Vault configuration files too? (y/N): " confirm_config
+          if [[ "$confirm_config" == "y" || "$confirm_config" == "Y" ]]; then
+            # Create a backup first
+            if [[ -d {{.VAULT_CONFIG_DIR}} ]]; then
+              mkdir -p {{.VAULT_CONFIG_DIR}}/backups
+              tar -czf {{.VAULT_CONFIG_DIR}}/backups/vault-config-{{.DATE}}.tar.gz -C $(dirname {{.VAULT_CONFIG_DIR}}) $(basename {{.VAULT_CONFIG_DIR}})
+              echo "Created backup at {{.VAULT_CONFIG_DIR}}/backups/vault-config-{{.DATE}}.tar.gz"
+              
+              # Delete sensitive files
+              find {{.VAULT_CONFIG_DIR}} -type f -name "credentials" -exec shred -u {} \;
+              find {{.VAULT_CONFIG_DIR}} -type f -name "*.conf" -exec shred -u {} \;
+              echo "Sensitive files securely deleted."
+            fi
+          fi
+          echo "Clean-up complete."
+        else
+          echo "Operation cancelled."
+        fi
+
+  status:
+    desc: Check the status of Vault pods, services, and security configuration
+    deps: [check]
+    cmds:
+      - echo "Checking Vault status..."
+      - echo "Pod status:"
+      - kubectl get pods -n {{.NAMESPACE}} -o wide
+      - echo "Service status:"
+      - kubectl get svc -n {{.NAMESPACE}}
+      - echo "Security configuration:"
+      - kubectl get netpol -n {{.NAMESPACE}}
+      - |
+        # Check if any pod is not running
+        if kubectl get pods -n {{.NAMESPACE}} -o jsonpath='{.items[?(@.status.phase!="Running")].metadata.name}' | grep -q .; then
+          echo "WARNING: Some pods are not in Running state!"
+        fi
+      - |
+        # Check if vault is sealed
+        VAULT_POD=$(kubectl -n {{.NAMESPACE}} get pods -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [[ -n "$VAULT_POD" ]]; then
+          SEALED=$(kubectl -n {{.NAMESPACE}} exec $VAULT_POD -- vault status -format=json 2>/dev/null | jq -r '.sealed' 2>/dev/null || echo "unknown")
+          if [[ "$SEALED" == "true" ]]; then
+            echo "WARNING: Vault is sealed! You need to unseal it with: task init"
+          elif [[ "$SEALED" == "false" ]]; then
+            echo "Vault is unsealed and operational."
+          else
+            echo "Unable to determine Vault seal status."
+          fi
+        else
+          echo "No Vault pod found."
+        fi
+  
+  logs:
+    desc: View logs for the Vault pod with security-relevant events
+    deps: [check]
+    cmds:
+      - |
+        VAULT_POD=$(kubectl -n {{.NAMESPACE}} get pods -l app.kubernetes.io/name=vault -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+        if [[ -n "$VAULT_POD" ]]; then
+          echo "Viewing logs for Vault pod $VAULT_POD..."
+          kubectl -n {{.NAMESPACE}} logs $VAULT_POD --tail=100
+          
+          echo ""
+          echo "Checking for security-relevant log entries..."
+          kubectl -n {{.NAMESPACE}} logs $VAULT_POD | grep -E "permission denied|access denied|authentication failed|invalid token|error|warning|failed" | tail -20
+        else
+          echo "No Vault pod found."
+        fi
+
+  windows-setup:
+    desc: Create secure batch files for Windows access
+    deps: [check]
+    cmds:
+      - echo "Copying Windows batch files to Windows home directory..."
+      - mkdir -p /mnt/c/Users/$USER/vault-access 2>/dev/null || true
+      - cp {{.SCRIPT_DIR}}/vault-port-forward.bat /mnt/c/Users/$USER/vault-access/
+      - cp {{.SCRIPT_DIR}}/vault-env.bat /mnt/c/Users/$USER/vault-access/
+      - |
+        # Create a README file with security tips
+        cat > /mnt/c/Users/$USER/vault-access/README.txt << 'EOF'
+        Vault Access - Security Notes
+        ============================
+
+        IMPORTANT: These files provide access to your Vault instance.
+        Follow these security best practices:
+
+        1. Do not share these files or the credentials with unauthorized users
+        2. Do not commit these files to version control
+        3. Store your Vault tokens securely
+        4. Always close port forwarding when not in use
+        5. Consider changing passwords regularly
+
+        Usage:
+        - Run vault-port-forward.bat to start port forwarding
+        - Run vault-env.bat to set Vault environment variables
+        - Access Vault UI at http://localhost:8201
+        EOF
+      - echo "Windows access files created in C:\\Users\\$USER\\vault-access\\"
+      - echo "Added security information in C:\\Users\\$USER\\vault-access\\README.txt"
+
+  save-creds:
+    desc: Securely back up Vault credentials
+    deps: [check, secure-dirs]
+    cmds:
+      - |
+        if [ -f {{.VAULT_CONFIG_DIR}}/credentials ]; then
+          BACKUP_FILE={{.VAULT_CONFIG_DIR}}/backups/credentials-{{.DATE}}
+          cp {{.VAULT_CONFIG_DIR}}/credentials $BACKUP_FILE
+          chmod 600 $BACKUP_FILE
+          echo "Credentials backed up to $BACKUP_FILE"
+          
+          # Encrypt backup with a password if gpg is available
+          if command -v gpg &>/dev/null; then
+            read -sp "Enter password to encrypt backup (leave empty for no encryption): " password
+            echo ""
+            if [[ -n "$password" ]]; then
+              echo "$password" | gpg --batch --yes --passphrase-fd 0 -c $BACKUP_FILE
+              shred -u $BACKUP_FILE
+              echo "Backup encrypted as $BACKUP_FILE.gpg"
+            fi
+          fi
+        else
+          echo "No credentials file found at {{.VAULT_CONFIG_DIR}}/credentials"
+        fi
+
+  backup:
+    desc: Create a secure backup of Vault policies
+    deps: [check, secure-dirs]
+    cmds:
+      - |
+        if command -v vault >/dev/null 2>&1; then
+          # Set vault environment variables
+          if [ -f {{.VAULT_CONFIG_DIR}}/config ]; then
+            source {{.VAULT_CONFIG_DIR}}/config
+          else
+            echo "Vault config not found at {{.VAULT_CONFIG_DIR}}/config"
+            exit 1
+          fi
+          
+          # Verify connectivity
+          if ! curl -s --connect-timeout 5 $VAULT_ADDR/v1/sys/health >/dev/null; then
+            echo "Cannot connect to Vault. Make sure port forwarding is active."
+            echo "Run: task port-forward"
+            exit 1
+          fi
+          
+          # Backup all policies
+          BACKUP_DIR={{.VAULT_CONFIG_DIR}}/backups/policies-{{.DATE}}
+          mkdir -p $BACKUP_DIR
+          chmod 700 $BACKUP_DIR
+          
+          echo "Backing up Vault policies to $BACKUP_DIR..."
+          for policy in $(vault policy list); do
+            if [[ "$policy" != "root" ]]; then  # Skip root policy
+              vault policy read "$policy" > $BACKUP_DIR/"$policy".hcl
+              chmod 600 $BACKUP_DIR/"$policy".hcl
+            fi
+          done
+          
+          # Backup auth methods
+          echo "Backing up auth methods configuration..."
+          vault auth list -format=json > $BACKUP_DIR/auth-methods.json
+          chmod 600 $BACKUP_DIR/auth-methods.json
+          
+          # Backup secret engines
+          echo "Backing up secret engines configuration..."
+          vault secrets list -format=json > $BACKUP_DIR/secret-engines.json
+          chmod 600 $BACKUP_DIR/secret-engines.json
+          
+          # Create a tar.gz archive for easier handling
+          tar -czf {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz -C $(dirname $BACKUP_DIR) $(basename $BACKUP_DIR)
+          chmod 600 {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz
+          
+          echo "Backup completed successfully."
+          echo "Backup archive: {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz"
+          
+          # Ask if user wants to encrypt the backup
+          if command -v gpg &>/dev/null; then
+            read -p "Would you like to encrypt the backup? (y/N): " encrypt
+            if [[ "$encrypt" == "y" || "$encrypt" == "Y" ]]; then
+              read -sp "Enter encryption password: " password
+              echo ""
+              echo "$password" | gpg --batch --yes --passphrase-fd 0 -c {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz
+              shred -u {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz
+              echo "Backup encrypted as {{.VAULT_CONFIG_DIR}}/backups/vault-backup-{{.DATE}}.tar.gz.gpg"
+            fi
+          fi
+        else
+          echo "Vault CLI not found. Please install it first."
+        fi
+  
+  rotate-creds:
+    desc: Rotate credentials for Vault users
+    deps: [check]
+    cmds:
+      - |
+        if ! command -v vault >/dev/null 2>&1; then
+          echo "Vault CLI not found. Please install it first."
+          exit 1
+        fi
+        
+        # Set vault environment variables
+        if [ -f {{.VAULT_CONFIG_DIR}}/config ]; then
+          source {{.VAULT_CONFIG_DIR}}/config
+        else
+          echo "Vault config not found at {{.VAULT_CONFIG_DIR}}/config"
+          exit 1
+        fi
+        
+        # Verify connectivity
+        if ! curl -s --connect-timeout 5 $VAULT_ADDR/v1/sys/health >/dev/null; then
+          echo "Cannot connect to Vault. Make sure port forwarding is active."
+          echo "Run: task port-forward"
+          exit 1
+        fi
+        
+        echo "Rotating credentials for Vault users..."
+        
+        # Check if users.conf exists
+        if [ ! -f {{.VAULT_CONFIG_DIR}}/users.conf ]; then
+          echo "No users.conf file found at {{.VAULT_CONFIG_DIR}}/users.conf"
+          exit 1
+        fi
+        
+        # Backup the current users.conf
+        cp {{.VAULT_CONFIG_DIR}}/users.conf {{.VAULT_CONFIG_DIR}}/users.conf.bak
+        
+        # Process each user
+        while IFS=: read -r username password policies || [[ -n "$username" ]]; do
+          # Skip comment lines and empty lines
+          if [[ "$username" =~ ^# ]] || [[ -z "$username" ]]; then
+            continue
+          fi
+          
+          # Generate a new password
+          NEW_PASSWORD=$(openssl rand -base64 16 | tr -d '/+=' | cut -c1-16)
+          
+          # Update the user in Vault
+          echo "Rotating password for user: $username"
+          vault write auth/userpass/users/$username password=$NEW_PASSWORD policies=$policies
+          
+          # Update the password in the users.conf file
+          sed -i "s/^$username:.*:/$username:$NEW_PASSWORD:/" {{.VAULT_CONFIG_DIR}}/users.conf
+        done < {{.VAULT_CONFIG_DIR}}/users.conf
+        
+        chmod 600 {{.VAULT_CONFIG_DIR}}/users.conf
+        echo "Credentials rotation completed successfully."
+        echo "Updated credentials saved to {{.VAULT_CONFIG_DIR}}/users.conf"
+  
+  audit:
+    desc: View Vault audit logs for security review
+    deps: [check]
+    cmds:
+      - |
+        AUDIT_LOG="{{.VAULT_CONFIG_DIR}}/logs/vault_audit.log"
+        if [ ! -f "$AUDIT_LOG" ]; then
+          echo "No audit log found at $AUDIT_LOG"
+          echo "Make sure audit logging is enabled in Vault."
+          exit 1
+        fi
+        
+        echo "Viewing recent audit log entries..."
+        
+        # Filter options for different security levels
+        echo "Select filter option:"
+        echo "1. Critical security events only"
+        echo "2. All authentication events"
+        echo "3. All authorization events"
+        echo "4. All events (unfiltered)"
+        read -p "Selection (1-4): " filter_option
+        
+        case $filter_option in
+          1)
+            echo "Showing critical security events..."
+            cat $AUDIT_LOG | jq -c 'select(.type == "response" and (.auth.error != null or .error != null))' | tail -50
+            ;;
+          2)
+            echo "Showing authentication events..."
+            cat $AUDIT_LOG | jq -c 'select(.type == "response" and .auth != null)' | tail -50
+            ;;
+          3)
+            echo "Showing authorization events..."
+            cat $AUDIT_LOG | jq -c 'select(.request.operation != "read" and .request.operation != null)' | tail -50
+            ;;
+          4)
+            echo "Showing all recent events..."
+            tail -50 $AUDIT_LOG
+            ;;
+          *)
+            echo "Invalid selection."
+            ;;
+        esac

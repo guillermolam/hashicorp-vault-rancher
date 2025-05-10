@@ -1,0 +1,40 @@
+# Minimal values.yaml for Vault in development mode
+server:
+  # Enable development mode - significantly simplifies setup
+  dev:
+    enabled: true
+    devRootToken: "root"
+  
+  # Disable standalone mode when using dev mode
+  standalone:
+    enabled: false
+  
+  # Service configuration for access
+  service:
+    enabled: true
+    type: NodePort
+    nodePort: 30820
+  
+  # Proper security context following non-root policy
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    fsGroup: 1000
+    
+  # Logging settings
+  logLevel: "debug"
+  logFormat: "standard"
+    
+# Enable UI
+ui:
+  enabled: true
+  serviceType: NodePort
+  serviceNodePort: 30821
+  
+# Enable injector (if needed)
+injector:
+  enabled: true
+  
+# Disable TLS for development
+global:
+  tlsDisable: true

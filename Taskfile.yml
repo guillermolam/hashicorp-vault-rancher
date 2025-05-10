@@ -1,0 +1,94 @@
+Taskfile.yml# Taskfile.yml
+version: '3'
+
+includes:
+  terraform: .task/terraform.yml
+  helm: .task/helm.yml
+  kind: .task/kind.yml
+  rancher: .task/rancher.yml
+  test: .task/test.yml
+  sbom: .task/sbom.yml
+  ci: .task/ci.yml
+
+vars:
+  PROJECT_NAME: vault-rancher-deployment
+  VERSION: 1.0.0
+
+tasks:
+  default:
+    desc: Display available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  init:
+    desc: Initialize the project
+    cmds:
+      - echo "Initializing {{.PROJECT_NAME}} version {{.VERSION}}"
+      - mkdir -p terraform/modules/{vault,certificates,auth}/tests
+      - mkdir -p terraform/environments/{dev-kind,prod-rancher}
+      - mkdir -p helm/values
+      - mkdir -p kind
+      - mkdir -p certificates/{ca,dev,prod}
+      - mkdir -p .github/workflows
+      - mkdir -p .github/actions/{setup-kind,terraform-test,helm-test,cyclonedx-bom}
+      - mkdir -p sbom/{config,templates}
+      - mkdir -p .task
+      - touch .gitignore
+      - echo "Project structure initialized"
+    status:
+      - test -d terraform/modules/vault
+
+  setup-dev:
+    desc: Set up development environment with Kind
+    deps: [init]
+    cmds:
+      - task: kind:create
+      - task: terraform:init-dev
+      - echo "Development environment set up successfully"
+
+  setup-prod:
+    desc: Set up production environment with Rancher
+    deps: [init]
+    cmds:
+      - task: rancher:setup
+      - task: terraform:init-prod
+      - echo "Production environment set up successfully"
+
+  test-all:
+    desc: Run all tests
+    cmds:
+      - task: test:unit
+      - task: test:integration
+      - task: test:helm
+      - echo "All tests passed successfully"
+
+  deploy-dev:
+    desc: Deploy to development environment
+    deps: [test:unit]
+    cmds:
+      - task: kind:create
+      - task: terraform:apply-dev
+      - echo "Deployed to development environment"
+
+  deploy-prod:
+    desc: Deploy to production environment
+    deps: [test:unit, test:integration]
+    cmds:
+      - task: terraform:apply-prod
+      - echo "Deployed to production environment"
+
+  generate-all:
+    desc: Generate all artifacts including SBOM
+    cmds:
+      - task: sbom:generate
+      - echo "All artifacts generated successfully"
+
+  clean:
+    desc: Clean up generated files
+    cmds:
+      - rm -f bom.json bom.xml
+      - find terraform -name ".terraform" -type d | xargs rm -rf
+      - find terraform -name "terraform.tfstate*" | xargs rm -f
+      - task: kind:delete
+      - echo "Cleanup completed successfully"

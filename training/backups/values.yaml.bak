@@ -1,0 +1,77 @@
+server:
+  dev:
+    enabled: false
+  standalone:
+    enabled: true
+  ha:
+    enabled: false
+  service:
+    enabled: true
+    type: NodePort
+    nodePort: 30820
+  dataStorage:
+    enabled: true
+    size: 10Gi
+    storageClass: null
+  # Add extra volumes for writable config
+  volumes:
+    - name: config-writable
+      emptyDir: {}
+  # Add extra volume mounts to provide writable paths
+  volumeMounts:
+    - name: config-writable
+      mountPath: /vault/config-writable
+  # Use an init container to copy configs and set permissions
+  extraInitContainers:
+    - name: setup-vault
+      image: busybox
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          # Create writable data directory if it doesn't exist
+          mkdir -p /vault/data
+          # Copy config from read-only configmap to writable location
+          cp /vault/config/extraconfig-from-values.hcl /vault/config-writable/
+          # Set correct permissions
+          chown -R 100:1000 /vault/data /vault/config-writable
+          chmod -R 755 /vault/data /vault/config-writable
+      volumeMounts:
+        - name: data
+          mountPath: /vault/data
+        - name: config
+          mountPath: /vault/config
+        - name: config-writable
+          mountPath: /vault/config-writable
+      securityContext:
+        runAsUser: 0  # Run as root for permission changes
+  # Make vault-local-config create files in writable location
+  extraEnvironmentVars:
+    VAULT_LOCAL_CONFIG: |
+      api_addr = "http://vault:8200"
+      listener "tcp" {
+        address = "0.0.0.0:8200"
+        tls_disable = 1
+      }
+      storage "file" {
+        path = "/vault/data"
+      }
+    # Redirect config to the writable directory
+    VAULT_CONFIG_DIR: "/vault/config-writable"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 1000
+    capabilities:
+      add: ["IPC_LOCK"]
+ui:
+  enabled: true
+  serviceType: NodePort
+  serviceNodePort: 30821
+  
+injector:
+  enabled: true
+  
+global:
+  tlsDisable: true

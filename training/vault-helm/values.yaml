@@ -1,0 +1,36 @@
+server:
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+      listener "tcp" {
+        address = "0.0.0.0:8200"
+        tls_disable = 1
+      }
+      storage "file" {
+        path = "/vault/data"
+      }
+
+  dataStorage:
+    enabled: true
+    size: 1Gi
+    storageClass: "local-path"
+
+  service:
+    type: NodePort
+    nodePort: 30820
+
+  securityContext:
+    runAsUser: 100
+    fsGroup: 1000
+
+ui:
+  enabled: true
+  serviceType: NodePort
+  serviceNodePort: 30821
+
+global:
+  tlsDisable: true
+
+injector:
+  enabled: false
