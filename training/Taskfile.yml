@@ -1,9 +1,9 @@
-version: '3'
+version: "3"
 
 vars:
   NAMESPACE: vault
-  VAULT_CONFIG_DIR: '{{.HOME}}/.vault'
-  SCRIPT_DIR: '{{.TASK_DIR}}'
+  VAULT_CONFIG_DIR: "{{.HOME}}/.vault"
+  SCRIPT_DIR: "{{.TASK_DIR}}"
   DATE: '{{now | date "20060102-150405"}}'
 
 tasks:
@@ -15,7 +15,6 @@ tasks:
 
   check:
     desc: Check prerequisites before installation
-    internal: true
     cmds:
       - |
         for cmd in kubectl helm jq openssl; do
@@ -38,7 +37,6 @@ tasks:
 
   secure-dirs:
     desc: Create secure directories for Vault configuration
-    internal: true
     cmds:
       - mkdir -p {{.VAULT_CONFIG_DIR}}
       - mkdir -p {{.VAULT_CONFIG_DIR}}/policies
@@ -151,7 +149,7 @@ tasks:
         else
           echo "No Vault pod found."
         fi
-  
+
   logs:
     desc: View logs for the Vault pod with security-relevant events
     deps: [check]
@@ -290,7 +288,7 @@ tasks:
         else
           echo "Vault CLI not found. Please install it first."
         fi
-  
+
   rotate-creds:
     desc: Rotate credentials for Vault users
     deps: [check]
@@ -300,7 +298,7 @@ tasks:
           echo "Vault CLI not found. Please install it first."
           exit 1
         fi
-        
+
         # Set vault environment variables
         if [ -f {{.VAULT_CONFIG_DIR}}/config ]; then
           source {{.VAULT_CONFIG_DIR}}/config
@@ -308,25 +306,25 @@ tasks:
           echo "Vault config not found at {{.VAULT_CONFIG_DIR}}/config"
           exit 1
         fi
-        
+
         # Verify connectivity
         if ! curl -s --connect-timeout 5 $VAULT_ADDR/v1/sys/health >/dev/null; then
           echo "Cannot connect to Vault. Make sure port forwarding is active."
           echo "Run: task port-forward"
           exit 1
         fi
-        
+
         echo "Rotating credentials for Vault users..."
-        
+
         # Check if users.conf exists
         if [ ! -f {{.VAULT_CONFIG_DIR}}/users.conf ]; then
           echo "No users.conf file found at {{.VAULT_CONFIG_DIR}}/users.conf"
           exit 1
         fi
-        
+
         # Backup the current users.conf
         cp {{.VAULT_CONFIG_DIR}}/users.conf {{.VAULT_CONFIG_DIR}}/users.conf.bak
-        
+
         # Process each user
         while IFS=: read -r username password policies || [[ -n "$username" ]]; do
           # Skip comment lines and empty lines
@@ -344,11 +342,11 @@ tasks:
           # Update the password in the users.conf file
           sed -i "s/^$username:.*:/$username:$NEW_PASSWORD:/" {{.VAULT_CONFIG_DIR}}/users.conf
         done < {{.VAULT_CONFIG_DIR}}/users.conf
-        
+
         chmod 600 {{.VAULT_CONFIG_DIR}}/users.conf
         echo "Credentials rotation completed successfully."
         echo "Updated credentials saved to {{.VAULT_CONFIG_DIR}}/users.conf"
-  
+
   audit:
     desc: View Vault audit logs for security review
     deps: [check]
@@ -360,9 +358,9 @@ tasks:
           echo "Make sure audit logging is enabled in Vault."
           exit 1
         fi
-        
+
         echo "Viewing recent audit log entries..."
-        
+
         # Filter options for different security levels
         echo "Select filter option:"
         echo "1. Critical security events only"
@@ -370,7 +368,7 @@ tasks:
         echo "3. All authorization events"
         echo "4. All events (unfiltered)"
         read -p "Selection (1-4): " filter_option
-        
+
         case $filter_option in
           1)
             echo "Showing critical security events..."

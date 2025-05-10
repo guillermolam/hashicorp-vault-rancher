@@ -1,0 +1,73 @@
+# .task/rancher.yml
+version: "3"
+
+vars:
+  RANCHER_CONTEXT: rancher-desktop
+
+tasks:
+  setup:
+    desc: Configure Rancher Desktop for Vault deployment
+    cmds:
+      - echo "Setting up Rancher Desktop environment..."
+      - kubectl config use-context {{.RANCHER_CONTEXT}}
+      - kubectl create namespace vault --dry-run=client -o yaml | kubectl apply -f -
+      - echo "Installing cert-manager for certificate handling..."
+      - kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
+      - kubectl -n cert-manager wait --for=condition=available --timeout=300s deployment/cert-manager
+      - kubectl -n cert-manager wait --for=condition=available --timeout=300s deployment/cert-manager-webhook
+      - echo "Rancher Desktop environment ready for Vault deployment"
+    status:
+      - kubectl config current-context | grep -q {{.RANCHER_CONTEXT}}
+      - kubectl get namespace vault
+
+  check:
+    desc: Check Rancher Desktop connection and status
+    cmds:
+      - echo "Checking Rancher Desktop connection..."
+      - kubectl config use-context {{.RANCHER_CONTEXT}}
+      - kubectl cluster-info
+      - kubectl get nodes
+      - echo "Checking Vault namespace in Rancher Desktop..."
+      - kubectl get namespace vault --ignore-not-found
+    ignore_error: true
+
+  clean:
+    desc: Clean up Vault resources from Rancher Desktop
+    cmds:
+      - echo "Cleaning up Vault resources from Rancher Desktop..."
+      - kubectl config use-context {{.RANCHER_CONTEXT}}
+      - kubectl delete namespace vault --ignore-not-found
+      - echo "Cleanup completed"
+    ignore_error: true
+
+  dashboard:
+    desc: Open Kubernetes dashboard for Rancher Desktop
+    cmds:
+      - echo "Starting Kubernetes dashboard for Rancher Desktop..."
+      - kubectl config use-context {{.RANCHER_CONTEXT}}
+      - |
+        if ! kubectl get deployment -n kubernetes-dashboard kubernetes-dashboard &>/dev/null; then
+          echo "Installing Kubernetes Dashboard..."
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+          kubectl -n kubernetes-dashboard wait --for=condition=available --timeout=300s deployment/kubernetes-dashboard
+        fi
+      - |
+        # Create admin-user and role binding if they don't exist
+        if ! kubectl get serviceaccount -n kubernetes-dashboard admin-user &>/dev/null; then
+          echo "Creating admin user..."
+          kubectl create serviceaccount admin-user -n kubernetes-dashboard
+          kubectl create clusterrolebinding admin-user --clusterrole=cluster-admin --serviceaccount=kubernetes-dashboard:admin-user
+        fi
+      - |
+        # Get token for admin-user
+        echo "Getting token for dashboard access..."
+        kubectl -n kubernetes-dashboard create token admin-user --duration=24h
+      - echo "Starting dashboard proxy..."
+      - kubectl config use-context {{.RANCHER_CONTEXT}}
+      - echo "Access the dashboard"
+      - |
+        echo "Open the following URL in your browser:"
+        echo "http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/"
+      - echo "Use the token obtained above for authentication"
+      - echo "To access the dashboard, run the following command in a separate terminal:"
+      - kubectl proxy

@@ -1,6 +1,13 @@
 {
-    "cSpell.words": [
-        "cyclonedx",
-        "tfstate"
-    ]
+  "cSpell.words": [
+    "cyclonedx",
+    "gruntwork",
+    "stretchr",
+    "TASKFILE",
+    "terratest",
+    "Terratest",
+    "testdir",
+    "tfstate",
+    "yourusername"
+  ]
 }

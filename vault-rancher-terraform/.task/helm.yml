@@ -1,0 +1,208 @@
+# .task/helm.yml
+version: "3"
+
+vars:
+  HELM_REPO_NAME: hashicorp
+  HELM_REPO_URL: https://helm.releases.hashicorp.com
+  CHART_NAME: vault
+  CHART_VERSION: 0.25.0
+
+tasks:
+  add-repo:
+    desc: Add Hashicorp Helm repo
+    cmds:
+      - echo "Adding Hashicorp Helm repository..."
+      - helm repo add {{.HELM_REPO_NAME}} {{.HELM_REPO_URL}}
+      - helm repo update
+    status:
+      - helm repo list | grep -q {{.HELM_REPO_NAME}}
+
+  lint-dev:
+    desc: Lint Helm chart for dev environment
+    deps: [add-repo]
+    cmds:
+      - echo "Linting Vault Helm chart for development..."
+      - helm lint {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/kind.yaml
+    sources:
+      - helm/values/kind.yaml
+
+  lint-prod:
+    desc: Lint Helm chart for production environment
+    deps: [add-repo]
+    cmds:
+      - echo "Linting Vault Helm chart for production..."
+      - helm lint {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/rancher.yaml
+    sources:
+      - helm/values/rancher.yaml
+
+  template-dev:
+    desc: Render Helm templates for dev environment
+    deps: [add-repo]
+    cmds:
+      - echo "Rendering Vault Helm templates for development..."
+      - helm template vault {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/kind.yaml --output-dir helm/rendered/kind
+    sources:
+      - helm/values/kind.yaml
+    generates:
+      - helm/rendered/kind/**/*.yaml
+
+  template-prod:
+    desc: Render Helm templates for production environment
+    deps: [add-repo]
+    cmds:
+      - echo "Rendering Vault Helm templates for production..."
+      - helm template vault {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/rancher.yaml --output-dir helm/rendered/rancher
+    sources:
+      - helm/values/rancher.yaml
+    generates:
+      - helm/rendered/rancher/**/*.yaml
+
+  test-dev:
+    desc: Test Helm chart for dev environment
+    deps: [add-repo]
+    cmds:
+      - echo "Testing Vault Helm chart for development..."
+      - mkdir -p helm/rendered/kind
+      - helm template vault {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/kind.yaml > helm/rendered/kind/all.yaml
+      - |
+        # Validate key resources exist in the rendered template
+        if grep -q "kind: StatefulSet" helm/rendered/kind/all.yaml && \
+           grep -q "name: vault" helm/rendered/kind/all.yaml && \
+           grep -q "kind: Service" helm/rendered/kind/all.yaml; then
+          echo "✅ Helm template contains required resources"
+        else
+          echo "❌ Helm template is missing required resources"
+          exit 1
+        fi
+    sources:
+      - helm/values/kind.yaml
+    generates:
+      - helm/rendered/kind/all.yaml
+
+  test-prod:
+    desc: Test Helm chart for production environment
+    deps: [add-repo]
+    cmds:
+      - echo "Testing Vault Helm chart for production..."
+      - mkdir -p helm/rendered/rancher
+      - helm template vault {{.HELM_REPO_NAME}}/{{.CHART_NAME}} --values helm/values/rancher.yaml > helm/rendered/rancher/all.yaml
+      - |
+        # Validate HA resources exist in the rendered template
+        if grep -q "kind: StatefulSet" helm/rendered/rancher/all.yaml && \
+           grep -q "name: vault" helm/rendered/rancher/all.yaml && \
+           grep -q "replicas: " helm/rendered/rancher/all.yaml && \
+           grep -q "ha:" helm/rendered/rancher/all.yaml && \
+           grep -q "kind: Service" helm/rendered/rancher/all.yaml; then
+          echo "✅ Helm template contains required HA resources"
+        else
+          echo "❌ Helm template is missing required HA resources"
+          exit 1
+        fi
+    sources:
+      - helm/values/rancher.yaml
+    generates:
+      - helm/rendered/rancher/all.yaml
+
+  generate-values-dev:
+    desc: Generate default values file for development
+    deps: [add-repo]
+    cmds:
+      - echo "Generating default Helm values for development environment..."
+      - mkdir -p helm/values
+      - |
+        cat > helm/values/kind.yaml << 'EOF'
+        server:
+          ha:
+            enabled: false
+          standalone:
+            enabled: true
+          dataStorage:
+            enabled: true
+            size: 1Gi
+            storageClass: "standard"
+          serviceAccount:
+            create: true
+          extraEnvironmentVars:
+            VAULT_LOG_LEVEL: debug
+            VAULT_LOG_FORMAT: json
+
+        ui:
+          enabled: true
+          serviceType: NodePort
+
+        # Dev-appropriate resource limits
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        EOF
+    generates:
+      - helm/values/kind.yaml
+
+  generate-values-prod:
+    desc: Generate default values file for production
+    deps: [add-repo]
+    cmds:
+      - echo "Generating default Helm values for production environment..."
+      - mkdir -p helm/values
+      - |
+        cat > helm/values/rancher.yaml << 'EOF'
+        global:
+          tlsDisable: false
+
+        server:
+          ha:
+            enabled: true
+            replicas: 3
+            raft:
+              enabled: true
+              setNodeId: true
+              config: |
+                storage "raft" {
+                  path = "/vault/data"
+                  node_id = "{{ .Release.Name }}-raft"
+                }
+                listener "tcp" {
+                  address = "0.0.0.0:8200"
+                  tls_disable = 1
+                }
+          standalone:
+            enabled: false
+          serviceAccount:
+            create: true
+          extraEnvironmentVars:
+            VAULT_LOG_LEVEL: debug
+            VAULT_LOG_FORMAT: json
+
+        ui:
+          enabled: true
+          serviceType: NodePort
+
+        # Dev-appropriate resource limits
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+        EOF
+    generates:
+      - helm/values/rancher.yaml
+  clean:
+    desc: Clean up rendered Helm templates
+    cmds:
+      - echo "Cleaning up rendered Helm templates..."
+      - rm -rf helm/rendered
+    ignore_error: true
+    status:
+      - test ! -d helm/rendered
+    generates:
+      - helm/rendered/kind
+      - helm/rendered/rancher
+    sources:
+      - helm/values/kind.yaml
+      - helm/values/rancher.yaml

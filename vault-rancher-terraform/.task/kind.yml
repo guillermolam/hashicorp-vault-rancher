@@ -1,0 +1,32 @@
+# .task/kind.yml
+version: "3"
+
+vars:
+  CLUSTER_NAME: vault-dev
+  KIND_CONFIG: ./kind/config.yaml
+
+tasks:
+  create:
+    desc: Create Kind cluster for development
+    cmds:
+      - echo "Creating Kind cluster {{.CLUSTER_NAME}}..."
+      - kind create cluster --name {{.CLUSTER_NAME}} --config {{.KIND_CONFIG}}
+    status:
+      - kind get clusters | grep -q {{.CLUSTER_NAME}}
+
+  delete:
+    desc: Delete Kind cluster
+    cmds:
+      - echo "Deleting Kind cluster {{.CLUSTER_NAME}}..."
+      - kind delete cluster --name {{.CLUSTER_NAME}}
+    ignore_error: true
+
+  setup:
+    desc: Set up Kind cluster with necessary components
+    deps: [create]
+    cmds:
+      - echo "Setting up Kind cluster with necessary components..."
+      - kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.0/cert-manager.yaml
+      - kubectl wait --for=condition=available --timeout=300s deployment/cert-manager -n cert-manager
+      - kubectl wait --for=condition=available --timeout=300s deployment/cert-manager-webhook -n cert-manager
+      - echo "Kind cluster setup completed"

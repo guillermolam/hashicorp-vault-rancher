@@ -1,0 +1,26 @@
+# .task/ci.yml
+version: "3"
+
+tasks:
+  act:
+    desc: Run GitHub Actions locally with Act
+    cmds:
+      - act --secret-file act-secrets.env {{.CLI_ARGS}}
+
+  run-unit-tests:
+    desc: Run unit tests workflow locally
+    cmds:
+      - task: act
+        vars: { CLI_ARGS: "-W .github/workflows/unit-tests.yml" }
+
+  run-kind-tests:
+    desc: Run Kind tests workflow locally
+    cmds:
+      - task: act
+        vars: { CLI_ARGS: "-W .github/workflows/kind-tests.yml" }
+
+  run-sbom:
+    desc: Run SBOM generation workflow locally
+    cmds:
+      - task: act
+        vars: { CLI_ARGS: "-W .github/workflows/sbom.yml" }

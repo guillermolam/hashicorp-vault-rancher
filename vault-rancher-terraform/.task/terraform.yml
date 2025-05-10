@@ -1,0 +1,60 @@
+# .task/terraform.yml
+version: "3"
+
+vars:
+  TG_DIR: ./terragrunt
+
+tasks:
+  init-dev:
+    desc: Initialize Terragrunt for development environment
+    cmds:
+      - echo "Initializing Terragrunt for development environment..."
+      - cd {{.TG_DIR}}/environments/dev-kind && terragrunt run-all init -reconfigure
+
+  init-prod:
+    desc: Initialize Terragrunt for production environment
+    cmds:
+      - echo "Initializing Terragrunt for production environment..."
+      - cd {{.TG_DIR}}/environments/prod-rancher && terragrunt run-all init -reconfigure
+
+  validate-dev:
+    desc: Validate Terragrunt configuration for development
+    deps: [init-dev]
+    cmds:
+      - echo "Validating Terragrunt configuration for development..."
+      - cd {{.TG_DIR}}/environments/dev-kind && terragrunt run-all validate
+
+  validate-prod:
+    desc: Validate Terragrunt configuration for production
+    deps: [init-prod]
+    cmds:
+      - echo "Validating Terragrunt configuration for production..."
+      - cd {{.TG_DIR}}/environments/prod-rancher && terragrunt run-all validate
+
+  plan-dev:
+    desc: Create Terragrunt plan for development
+    deps: [validate-dev]
+    cmds:
+      - echo "Creating Terragrunt plan for development..."
+      - cd {{.TG_DIR}}/environments/dev-kind && terragrunt run-all plan
+
+  plan-prod:
+    desc: Create Terragrunt plan for production
+    deps: [validate-prod]
+    cmds:
+      - echo "Creating Terragrunt plan for production..."
+      - cd {{.TG_DIR}}/environments/prod-rancher && terragrunt run-all plan
+
+  apply-dev:
+    desc: Apply Terragrunt configuration for development
+    deps: [plan-dev]
+    cmds:
+      - echo "Applying Terragrunt configuration for development..."
+      - cd {{.TG_DIR}}/environments/dev-kind && terragrunt run-all apply --auto-approve
+
+  apply-prod:
+    desc: Apply Terragrunt configuration for production
+    deps: [plan-prod]
+    cmds:
+      - echo "Applying Terragrunt configuration for production..."
+      - cd {{.TG_DIR}}/environments/prod-rancher && terragrunt run-all apply --auto-approve

@@ -1,0 +1,77 @@
+# .task/sbom.yml
+version: "3"
+
+vars:
+  OUTPUT_DIR: ./
+  CONFIG_DIR: ./sbom/config
+
+tasks:
+  validate-config:
+    desc: Validate CycloneDX configuration files
+    cmds:
+      - |
+        for config in {{.CONFIG_DIR}}/*.json; do
+          echo "Validating $config..."
+          jq empty "$config" || (echo "Invalid JSON in $config" && exit 1)
+        done
+    silent: true
+
+  install-tools:
+    desc: Install CycloneDX tools
+    cmds:
+      - |
+        if ! command -v cyclonedx-cli &> /dev/null; then
+          echo "Installing CycloneDX CLI..."
+          npm install -g @cyclonedx/cyclonedx-cli
+        fi
+        if ! command -v cyclonedx-gomod &> /dev/null; then
+          echo "Installing CycloneDX Go Module tool..."
+          go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+        fi
+    silent: true
+
+  generate-terraform:
+    desc: Generate SBOM for Terraform components
+    deps: [install-tools, validate-config]
+    cmds:
+      - echo "Generating SBOM for Terraform components..."
+      - cyclonedx-gomod app -output {{.OUTPUT_DIR}}/terraform-bom.json -path ./terraform
+    sources:
+      - terraform/**/*.tf
+      - terraform/**/*.tfvars
+    generates:
+      - terraform-bom.json
+
+  generate-helm:
+    desc: Generate SBOM for Helm components
+    deps: [install-tools, validate-config]
+    cmds:
+      - echo "Generating SBOM for Helm components..."
+      - cyclonedx-gomod app -output {{.OUTPUT_DIR}}/helm-bom.json -path ./helm
+    sources:
+      - helm/**/*.yaml
+      - helm/**/*.yml
+    generates:
+      - helm-bom.json
+
+  merge:
+    desc: Merge all SBOM files
+    deps: [generate-terraform, generate-helm]
+    cmds:
+      - echo "Merging SBOM files..."
+      - cyclonedx-cli merge --input-files {{.OUTPUT_DIR}}/terraform-bom.json {{.OUTPUT_DIR}}/helm-bom.json --output-file {{.OUTPUT_DIR}}/bom.json
+      - cyclonedx-cli convert --input-file {{.OUTPUT_DIR}}/bom.json --output-file {{.OUTPUT_DIR}}/bom.xml
+    sources:
+      - terraform-bom.json
+      - helm-bom.json
+    generates:
+      - bom.json
+      - bom.xml
+
+  generate:
+    desc: Generate complete SBOM
+    cmds:
+      - task: merge
+      - echo "Generating SBOM for all components..."
+      - cyclonedx-cli generate --input-files {{.OUTPUT_DIR}}/bom.json --output-file {{.OUTPUT_DIR}}/bom.json
+      - cyclonedx-cli convert --input-file {{.OUTPUT_DIR}}/bom.json --output-file {{.OUTPUT_DIR}}/bom.xml

@@ -1,0 +1,76 @@
+name: Terraform Unit Tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "terraform/**"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "terraform/**"
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  terraform-validate:
+    name: Validate Terraform Modules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+
+      - name: Initialize Terraform Modules
+        run: |
+          find terraform/modules -type d -mindepth 1 -maxdepth 1 | while read -r module; do
+            echo "Initializing: $module"
+            cd "$module"
+            terraform init -backend=false
+            cd - > /dev/null
+          done
+
+      - name: Validate Terraform Modules
+        run: |
+          find terraform/modules -type d -mindepth 1 -maxdepth 1 | while read -r module; do
+            echo "Validating: $module"
+            cd "$module"
+            terraform validate
+            cd - > /dev/null
+          done
+
+  terratest:
+    name: Run Terratest Unit Tests
+    runs-on: ubuntu-latest
+    needs: [terraform-validate]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.20"
+
+      - name: Install Terratest dependencies
+        run: |
+          cd terraform/tests
+          go mod init github.com/yourusername/vault-rancher-deployment
+          go get github.com/gruntwork-io/terratest/modules/terraform
+          go get github.com/stretchr/testify/assert
+
+      - name: Run Terratest
+        run: |
+          find terraform/modules -name "*_test.go" | while read -r testfile; do
+            testdir=$(dirname "$testfile")
+            echo "Running tests in: $testdir"
+            cd "$testdir"
+            go test -v
+            cd - > /dev/null
+          done

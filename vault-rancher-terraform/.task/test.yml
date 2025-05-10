@@ -1,0 +1,49 @@
+# .task/test.yml
+version: "3"
+
+tasks:
+  unit:
+    desc: Run unit tests
+    cmds:
+      - echo "Running unit tests for Terraform modules..."
+      - |
+        cd terraform/modules/vault/tests && go test -v ./...
+        cd terraform/modules/certificates/tests && go test -v ./...
+        cd terraform/modules/auth/tests && go test -v ./...
+    sources:
+      - terraform/modules/*/tests/**/*_test.go
+      - terraform/modules/*/main.tf
+      - terraform/modules/*/variables.tf
+
+  integration:
+    desc: Run integration tests
+    deps: [unit]
+    cmds:
+      - echo "Running integration tests..."
+      - cd terraform/tests && go test -v ./...
+    sources:
+      - terraform/tests/**/*_test.go
+
+  helm:
+    desc: Test Helm charts
+    cmds:
+      - echo "Testing Helm charts..."
+      - helm lint ./helm
+    sources:
+      - helm/**/*.yaml
+      - helm/**/*.yml
+
+  tflint:
+    desc: Run TFLint on Terraform code
+    cmds:
+      - echo "Running TFLint..."
+      - |
+        find terraform/modules -type d -mindepth 1 -maxdepth 1 | while read -r module; do
+          echo "Linting: $module"
+          cd "$module"
+          tflint --init
+          tflint
+          cd - > /dev/null
+        done
+    sources:
+      - terraform/**/*.tf

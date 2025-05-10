@@ -1,14 +1,13 @@
-Taskfile.yml# Taskfile.yml
-version: '3'
+version: "3"
 
 includes:
-  terraform: .task/terraform.yml
-  helm: .task/helm.yml
-  kind: .task/kind.yml
-  rancher: .task/rancher.yml
-  test: .task/test.yml
-  sbom: .task/sbom.yml
-  ci: .task/ci.yml
+  terraform: ./vault-rancher-terraform/.task/terraform.yml
+  helm: ./vault-rancher-terraform/.task/helm.yml
+  kind: ./vault-rancher-terraform/.task/kind.yml
+  rancher: ./vault-rancher-terraform/.task/rancher.yml
+  test: ./vault-rancher-terraform/.task/test.yml
+  sbom: ./vault-rancher-terraform/.task/sbom.yml
+  ci: ./vault-rancher-terraform/.task/ci.yml
 
 vars:
   PROJECT_NAME: vault-rancher-deployment
